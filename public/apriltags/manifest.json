@@ -1,0 +1,11 @@
+{
+  "family": "36h11",
+  "source": "DECODE_AprilTagArtwork.pdf",
+  "tags": [
+    { "id": 20, "file": "tag-20-36h11.png", "role": "blue" },
+    { "id": 21, "file": "tag-21-36h11.png", "role": "neutral" },
+    { "id": 22, "file": "tag-22-36h11.png", "role": "neutral" },
+    { "id": 23, "file": "tag-23-36h11.png", "role": "neutral" },
+    { "id": 24, "file": "tag-24-36h11.png", "role": "red" }
+  ]
+}
