@@ -1,120 +1,137 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import lightFieldImage from "../../decode-custom-field-images-meepmeep-compatible-printer-v0-9m6dg4eqoonf1.webp";
-import darkFieldImage from "../../decode-custom-field-images-meepmeep-compatible-printer-v0-nlvmv6rqoonf1.webp";
+import { useEffect, useRef, useState } from "react";
+import { courseFor } from "../course/course";
+import { readProgress, writeProgress } from "../course/progress";
+import type { Path } from "../course/types";
+import { sources } from "../course/sources";
+import { TagDiagram, FlowDiagram, AxesDiagram, Comparison } from "../components/Diagrams";
+import { Icon } from "../components/Icon";
+import { Simulator } from "../components/Simulator";
+import { CodeWalkthrough } from "../components/CodeWalkthrough";
+import { TargetDataGuide } from "../components/TargetDataGuide";
+import { Challenge, Checklist, Resources, Troubleshooter, UIExplainer } from "../components/Activities";
+import { initialLab, tick } from "../simulation/model";
 
-type Point = { x: number; y: number };
-type Tag = Point & { id: number };
-const SIZE = 141, HALF = SIZE / 2;
-const steps = [
-  ["Choose a camera", "Limelight reports tx/ty angles. VisionPortal reports an AprilTag pose in your selected distance unit."],
-  ["Match the hardware name", "This case-sensitive name must exactly match the Robot Configuration: “limelight” or “Webcam 1” in this workshop."],
-  ["Select an AprilTag pipeline", "Pipeline 0 recognizes the FTC 36h11 family. A color or neural pipeline cannot return fiducials."],
-  ["Set tag size and ID filter", "Size is measured edge-to-edge. The optional filter ignores every tag except the IDs your robot needs."],
-  ["Start and verify", "Run the OpMode. A valid result requires a started camera, correct pipeline, and a visible allowed tag."],
-];
-const code = `@TeleOp(name = "AprilTag Workshop")
-public class AprilTagWorkshop extends LinearOpMode {
-  @Override public void runOpMode() {
-    Limelight3A limelight = hardwareMap.get(
-      Limelight3A.class, "limelight");
-    limelight.pipelineSwitch(0);
-    limelight.start();
-    waitForStart();
-
-    while (opModeIsActive()) {
-      LLResult result = limelight.getLatestResult();
-      if (result != null && result.isValid()) {
-        telemetry.addData("tx", result.getTx());
-      }
-      telemetry.update();
-    }
-  }
-}`;
-
-const Metric = ({ label, value, unit = "" }: { label: string; value: string; unit?: string }) => <div className="metric"><span>{label}</span><strong>{value}<small>{unit}</small></strong></div>;
-
-function Field({ robot, tags, selectedId, setRobot, setTag, select, dark, setDark, addTag, removeTag, tagToAdd, setTagToAdd }: { robot: Point; tags: Tag[]; selectedId: number; setRobot: (p: Point) => void; setTag: (id: number, p: Point) => void; select: (id: number) => void; dark: boolean; setDark: (dark: boolean) => void; addTag: () => void; removeTag: () => void; tagToAdd: number; setTagToAdd: (id: number) => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [drag, setDrag] = useState<"robot" | number | null>(null);
-  const css = (p: Point) => ({ left: `${(p.x + HALF) / SIZE * 100}%`, top: `${(HALF - p.y) / SIZE * 100}%` });
-  const move = (x: number, y: number) => {
-    if (drag === null || !ref.current) return;
-    const b = ref.current.getBoundingClientRect();
-    const p = { x: Math.max(-HALF, Math.min(HALF, (x - b.left) / b.width * SIZE - HALF)), y: Math.max(-HALF, Math.min(HALF, HALF - (y - b.top) / b.height * SIZE)) };
-    if (drag === "robot") setRobot(p);
-    else setTag(drag, p);
+export default function App() {
+  const [progress, setProgress] = useState(readProgress);
+  const [presenter, setPresenter] = useState(false), [outline, setOutline] = useState(false);
+  const [reset, setReset] = useState(false), [answer, setAnswer] = useState<number | null>(null);
+  const [lab, setLab] = useState(() => initialLab());
+  const [labOpen, setLabOpen] = useState(false);
+  const [storageWarning, setStorageWarning] = useState(false);
+  const [endMessage, setEndMessage] = useState(false);
+  const resetDialog = useRef<HTMLDialogElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const workshop = progress.mode === "workshop";
+  const visibleModules = courseFor(progress.path, progress.mode), lessons = visibleModules.flatMap(m => m.lessons);
+  const index = Math.max(0, lessons.findIndex(l => l.id === progress.lesson)), lesson = lessons[index];
+  const module = visibleModules.find(m => m.lessons.includes(lesson))!;
+  const [expanded, setExpanded] = useState(module.id);
+  const minuteStart = visibleModules.slice(0, visibleModules.indexOf(module)).reduce((n, m) => n + m.minutes, 0);
+  const count = lessons.filter(l => progress.completed.includes(l.id)).length, percent = Math.round(count / lessons.length * 100);
+  const complete = () => setProgress(p => ({ ...p, completed: [...new Set([...p.completed, lesson.id])] }));
+  const navigate = (id: string) => {
+    const destination = visibleModules.find(m => m.lessons.some(l => l.id === id));
+    setProgress(p => ({ ...p, lesson: id })); setExpanded(destination?.id ?? "");
+    setAnswer(null); setEndMessage(false); setOutline(false);
+    setLab(s => destination && destination.path !== "shared" && destination.path !== s.camera ? initialLab(destination.path) : { ...s, assist: false });
+    heading.current?.focus({ preventScroll: true }); window.scrollTo({ top: 0 });
   };
-  return <div className="field-shell">
-    <div className="ruler ruler-x"><span>-70.5</span><span>-47</span><span>-23.5</span><b>0</b><span>23.5</span><span>47</span><span>70.5 in</span></div>
-    <div className="ruler ruler-y"><span>+70.5</span><span>+47</span><span>+23.5</span><b>0</b><span>-23.5</span><span>-47</span><span>-70.5</span></div>
-    <div className="field" ref={ref} onPointerMove={e => move(e.clientX, e.clientY)} onPointerUp={() => setDrag(null)} onPointerLeave={() => setDrag(null)} role="application" aria-label="Interactive 141 inch FTC field">
-      <img className="field-image" src={dark ? darkFieldImage : lightFieldImage} alt="" draggable="false" />
-      <div className="field-origin"><i className="axis-x"/><i className="axis-y"/><span>0,0</span></div><div className="alliance red-alliance">RED WALL</div><div className="alliance blue-alliance">BLUE WALL</div>
-      <button className="robot" style={css(robot)} onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); setDrag("robot"); }} aria-label={`Robot X ${robot.x.toFixed(1)}, Y ${robot.y.toFixed(1)}`}><i/><span>ROBOT</span></button>
-      {tags.map(t => <button key={t.id} className={`tag ${t.id === selectedId ? "selected" : ""}`} style={css(t)} onClick={() => select(t.id)} onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); select(t.id); setDrag(t.id); }} aria-label={`AprilTag ${t.id} X ${t.x.toFixed(1)}, Y ${t.y.toFixed(1)}`}><img src={`${import.meta.env.BASE_URL}apriltags/tag-${t.id}-36h11.png`} alt="" draggable="false"/><span>{t.id}</span><small>CENTER</small></button>)}
-    </div><div className="field-caption"><span>Inside: <b>141 × 141 in</b></span><span>Origin: <b>field center</b></span><button className="field-theme" onClick={() => setDark(!dark)} aria-pressed={dark}>{dark ? "☾ Dark field" : "☀ Light field"}</button></div>
-    <div className="tag-controls"><span><b>{tags.length}</b> TAG{tags.length === 1 ? "" : "S"} · SELECTED <b>{tags.length ? selectedId : "NONE"}</b></span><label>TAG TO ADD<select aria-label="Tag to add" value={tagToAdd} onChange={e => setTagToAdd(Number(e.target.value))}>{[20,21,22,23,24].map(id => <option key={id} value={id} disabled={tags.some(tag => tag.id === id)}>ID {id}{tags.some(tag => tag.id === id) ? " · on field" : ""}</option>)}</select></label><button onClick={addTag} disabled={tags.some(tag => tag.id === tagToAdd)}>＋ Add <kbd>A</kbd></button><button className="remove-tag" onClick={removeTag} disabled={tags.length === 0}>− Remove <kbd>Del / ⌫</kbd></button></div>
-  </div>;
-}
-
-function App() {
-  const [camera, setCamera] = useState("Limelight 3A"), [name, setName] = useState("limelight"), [pipeline, setPipeline] = useState(0), [tagSize, setTagSize] = useState(2), [filter, setFilter] = useState(""), [running, setRunning] = useState(false), [step, setStep] = useState(0);
-  const [robot, setRobot] = useState<Point>({ x: -28, y: -30 }), [tags, setTags] = useState<Tag[]>([{id:20,x:42,y:48},{id:21,x:-48,y:48},{id:22,x:0,y:50},{id:23,x:-45,y:-48},{id:24,x:43,y:-48}]), [selectedId, select] = useState(20), [darkField, setDarkField] = useState(true), [tagToAdd, setTagToAdd] = useState(20);
-  const tag = tags.find(t => t.id === selectedId);
-  const dx = (tag?.x ?? robot.x) - robot.x, dy = (tag?.y ?? robot.y) - robot.y, distance = Math.hypot(dx,dy), tx = Math.atan2(dx,dy)*180/Math.PI;
-  const configured = name === (camera === "Limelight 3A" ? "limelight" : "Webcam 1") && pipeline === 0 && tagSize > 0;
-  const allowed = !filter.trim() || filter.split(",").map(Number).includes(selectedId), valid = running && configured && allowed && Boolean(tag);
-  const message = useMemo(() => !running ? "Complete the setup, then run the OpMode." : !tag ? "No AprilTag is on the field. Choose an ID and press A to add one." : !configured ? "Configuration mismatch — review the highlighted lesson step." : !allowed ? `Tag ${selectedId} is excluded by the ID filter.` : `Camera started. Tag ${selectedId} center detected.`, [running,tag,configured,allowed,selectedId]);
-  const setTag = (id:number,p:Point) => setTags(old => old.map(t => t.id === id ? {...t,...p}:t));
-  const addTag = () => {
-    const id = tagToAdd;
-    if (tags.some(tag => tag.id === id)) return;
-    const offset = tags.length * 8 - 16;
-    setTags(old => [...old, { id, x: offset, y: offset }]);
-    select(id);
+  const next = () => { if (lesson.kind !== "quiz" && lesson.kind !== "challenge") complete(); if (index < lessons.length - 1) navigate(lessons[index + 1].id); else setEndMessage(true); };
+  const changePath = (path: Path) => { const ids = courseFor(path).flatMap(m => m.lessons).map(l => l.id); setProgress(p => ({ ...p, path, lesson: ids.includes(p.lesson) ? p.lesson : "compare" })); setAnswer(null); setEndMessage(false); setLab(s => path !== "both" && path !== s.camera ? initialLab(path) : { ...s, assist: false }); };
+  const changeMode = (mode: "workshop" | "reference") => {
+    setProgress(p => ({ ...p, mode, lesson: "welcome" })); setExpanded("welcome");
+    setAnswer(null); setEndMessage(false); setLabOpen(false); setLab(s => ({ ...s, running: false, assist: false, phase: "Paused" }));
   };
-  const removeTag = () => {
-    if (tags.length === 0) return;
-    const remaining = tags.filter(item => item.id !== selectedId);
-    setTags(remaining);
-    setTagToAdd(selectedId);
-    if (remaining.length) select(remaining[0].id);
+  useEffect(() => { if (!writeProgress(progress)) queueMicrotask(() => setStorageWarning(true)); }, [progress]);
+  useEffect(() => {
+    if (!lab.running) return;
+    const timer = window.setInterval(() => setLab(s => tick(s)), 80);
+    return () => window.clearInterval(timer);
+  }, [lab.running]);
+  useEffect(() => {
+    if (!lab.running || lab.phase !== "Opening camera") return;
+    const timer = window.setTimeout(() => setLab(s => ({ ...s, phase: "Streaming" })), 400);
+    return () => window.clearTimeout(timer);
+  }, [lab.running, lab.phase]);
+  useEffect(() => {
+    const release = () => setLab(s => ({ ...s, assist: false }));
+    window.addEventListener("blur", release); document.addEventListener("visibilitychange", release);
+    return () => { window.removeEventListener("blur", release); document.removeEventListener("visibilitychange", release); };
+  }, []);
+  useEffect(() => { if (reset) resetDialog.current?.showModal(); else resetDialog.current?.close(); }, [reset]);
+  const closeLab = () => { setLabOpen(false); setLab(s => ({ ...s, assist: false, running: false, phase: "Paused" })); };
+  const openLab = () => {
+    const desiredCamera = module.path === "shared" ? lab.camera : module.path;
+    if (desiredCamera !== lab.camera) setLab(initialLab(desiredCamera));
+    setLabOpen(true);
+  };
+  const demonstrate = (effect: string, camera: string) => {
+    setLabOpen(true);
+    setLab(old => {
+      const nextLab = old.camera === camera ? { ...old, assist: false } : initialLab(camera === "webcam" ? "webcam" : "limelight");
+      if (effect === "stop") return { ...nextLab, running: false, phase: "Closed", assist: false };
+      if (effect === "hardware") return { ...nextLab, hardware: nextLab.camera === "webcam" ? "Webcam 1" : "limelight", phase: "Hardware mapped", running: false };
+      if (effect === "processor") return { ...nextLab, processor: true, attached: false, phase: "Processor ready", running: false };
+      if (effect === "portal") return { ...nextLab, processor: true, attached: true, phase: "Opening camera", running: true };
+      if (effect === "wait") return { ...nextLab, phase: "Waiting for Start", running: false };
+      if (effect === "pipeline") return { ...nextLab, slot: 0, captures: [], phase: "Pipeline 0 selected", running: false };
+      return { ...nextLab, running: true, phase: "Streaming", processor: true, attached: true };
+    });
   };
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target;
-      if ((target instanceof Element && target.matches("input, select, textarea, [contenteditable='true']")) || event.ctrlKey || event.metaKey || event.altKey) return;
-      if ((event.key === "Delete" || event.key === "Backspace") && tags.length > 0) {
-        event.preventDefault();
-        removeTag();
-      } else if (event.key.toLowerCase() === "a" && !tags.some(item => item.id === tagToAdd)) {
-        event.preventDefault();
-        addTag();
-      }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setPresenter(false); setOutline(false); setReset(false); return; }
+      if (e.ctrlKey || e.metaKey || e.altKey || (e.target instanceof Element && e.target.closest("input,select,textarea,button,[role=dialog]"))) return;
+      if (e.key === "ArrowRight") { e.preventDefault(); next(); }
+      if (e.key === "ArrowLeft" && index > 0) { e.preventDefault(); navigate(lessons[index - 1].id); }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
   });
-  return <main>
-    <header className="topbar"><div><p className="eyebrow">FTC STAFF WORKSHOP · LESSON 1 OF 6</p><h1>AprilTag Camera Lab</h1></div><div className={`status ${running ? "live":""}`}><i/>{running ? "OPMODE RUNNING":"CONFIGURATION MODE"}</div></header>
-    <div className="lesson-progress">{["CAMERA","TAG ID","VALUES","DISTANCE","ALIGN","SAFETY"].map((x,i)=><span key={x} className={i===0?"active":""}>{i+1}<small>{x}</small></span>)}</div>
-    <section className="workspace">
-      <aside className="panel lesson-panel"><div className="panel-heading"><span>01</span><div><p>GUIDED LESSON</p><h2>Configure the camera</h2></div></div>
-        <div className="step-list">{steps.map((s,i)=><button key={s[0]} className={step===i?"current":step>i?"done":""} onClick={()=>setStep(i)}><b>{step>i?"✓":i+1}</b><span>{s[0]}</span></button>)}</div>
-        <div className="coach-card"><p>STEP {step+1} EXPLAINED</p><h3>{steps[step][0]}</h3><span>{steps[step][1]}</span></div>
-        <label className={step===0?"focus-field":""}>Camera type<select value={camera} onChange={e=>{setCamera(e.target.value);setName(e.target.value==="Limelight 3A"?"limelight":"Webcam 1")}}><option>Limelight 3A</option><option>Webcam / VisionPortal</option></select><small>{camera==="Limelight 3A"?"Network-connected smart camera":"USB camera processed by Control Hub"}</small></label>
-        <label className={step===1?"focus-field":""}>Hardware name<input value={name} onChange={e=>setName(e.target.value)}/><small>Case-sensitive Robot Configuration name</small></label>
-        <div className="form-row"><label className={step===2?"focus-field":""}>Pipeline<input type="number" value={pipeline} onChange={e=>setPipeline(Number(e.target.value))}/><small>0 = AprilTag 36h11</small></label><label>Tag family<select><option>36h11</option></select><small>FTC standard family</small></label></div>
-        <div className="form-row"><label className={step===3?"focus-field":""}>Tag size (in)<input type="number" min=".1" step=".1" value={tagSize} onChange={e=>setTagSize(Number(e.target.value))}/></label><label className={step===3?"focus-field":""}>ID filter<input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Blank = all"/></label></div>
-        <div className="lesson-actions"><button disabled={!step} onClick={()=>setStep(s=>s-1)}>← Back</button><button className="next" disabled={step===4} onClick={()=>setStep(s=>s+1)}>Next step →</button></div>
+  const source = sources[lesson.source];
+  return <div className={"app " + progress.theme + (presenter ? " presenter" : "") + (progress.reducedMotion ? " reduce-motion" : "")}>
+    <a href="#lesson" className="skip-link">Skip to lesson</a>
+    <header className="app-header">
+      <button className="icon-button mobile-menu" aria-label="Toggle course outline" onClick={() => setOutline(!outline)}><Icon name="menu"/></button>
+      <a className="brand" href="#welcome" onClick={e => { e.preventDefault(); navigate("welcome"); }}><span className="brand-mark"><Icon name="target" size={26}/></span><span>AprilTag <b>Lab</b><small>FTC STAFF WORKSHOP</small></span></a>
+      <div className="header-center"><span className="header-divider"/><Icon name="book" size={16}/><span>{workshop ? "30 minutes · camera to code" : "Optional reference library"}</span></div>
+      <div className="header-actions"><button className="icon-button" aria-label="Toggle light theme" onClick={() => setProgress(p => ({ ...p, theme: p.theme === "dark" ? "light" : "dark" }))}><Icon name="sun"/></button><button className={presenter ? "button active" : "button"} onClick={() => setPresenter(!presenter)} aria-pressed={presenter}><Icon name="screen" size={17}/>{presenter ? "Exit presenter" : "Presenter mode"}</button></div>
+    </header>
+    <div className={"app-layout " + (labOpen ? "with-lab" : "")}>
+      <aside className={"course-sidebar " + (outline ? "open" : "")} aria-label="Course outline">
+        <div className="sidebar-heading"><span className="eyebrow">{workshop ? "THE 30-MINUTE WORKSHOP" : "OPTIONAL REFERENCE"}</span><span className="small-badge">{visibleModules.length} modules</span></div>
+        <div className="course-mode"><label htmlFor="course-mode">Course view</label><select id="course-mode" value={progress.mode} onChange={e => changeMode(e.target.value as "workshop" | "reference")}><option value="workshop">Workshop · 30 minutes</option><option value="reference">Reference library · optional</option></select></div>
+        {!workshop && <div className="path-tabs" aria-label="Camera path">{(["both", "webcam", "limelight"] as Path[]).map(path => <button key={path} aria-pressed={progress.path === path} onClick={() => changePath(path)}>{path === "both" ? "Both" : path === "webcam" ? "Webcam" : "Limelight"}</button>)}</div>}
+        <nav className="module-list">{visibleModules.map(m => { const open = expanded === m.id; const finished = m.lessons.every(l => progress.completed.includes(l.id)); return <div className={"module-item " + (module.id === m.id ? "current" : "")} key={m.id}>
+          <button className="module-button" aria-label={m.label + " " + m.title} aria-expanded={open} onClick={() => { if (module.id === m.id) setExpanded(open ? "" : m.id); else navigate(m.lessons[0].id); }}><span className={"module-number " + (finished ? "finished" : "")}>{finished ? <Icon name="check" size={15}/> : m.label}</span><span><strong>{m.title}</strong><small>{m.lessons.length} {m.lessons.length === 1 ? "lesson" : "lessons"} · {m.minutes} min</small></span><Icon name="chevron" size={14}/></button>
+          {open && <div className="lesson-links">{m.lessons.map(l => <button key={l.id} aria-current={lesson.id === l.id ? "step" : undefined} onClick={() => navigate(l.id)}><span className={"lesson-dot " + (progress.completed.includes(l.id) ? "finished" : "")}>{progress.completed.includes(l.id) ? "✓" : ""}</span>{l.title}</button>)}</div>}
+        </div>; })}</nav>
+        <div className="sidebar-bottom"><div className="progress-label"><span>Your progress</span><strong>{percent}%</strong></div><progress value={count} max={lessons.length}/><small>{count} of {lessons.length} lessons complete</small><button className="text-button" onClick={() => setReset(true)}><Icon name="reset" size={14}/> Reset progress</button></div>
       </aside>
-      <section className="panel editor-panel"><div className="panel-heading"><span>JAVA</span><div><p>TEAMCODE · LIVE PREVIEW</p><h2>AprilTagWorkshop.java</h2></div></div><pre className="editor" tabIndex={0}><code>{code}</code></pre><div className="runbar"><button className="run" onClick={()=>{setRunning(true);setStep(4)}} disabled={running}>▶ Run OpMode</button><button onClick={()=>setRunning(false)} disabled={!running}>■ Stop</button><button className="reset" onClick={()=>{setRunning(false);setRobot({x:-28,y:-30})}}>↻ Reset</button></div></section>
-      <aside className="right-column">
-        <section className="panel sim-panel"><div className="panel-heading"><span>FIELD</span><div><p>FTC COORDINATE SYSTEM</p><h2>Interactive field simulator</h2></div></div><Field robot={robot} tags={tags} selectedId={selectedId} setRobot={setRobot} setTag={setTag} select={select} dark={darkField} setDark={setDarkField} addTag={addTag} removeTag={removeTag} tagToAdd={tagToAdd} setTagToAdd={setTagToAdd}/></section>
-        <section className="panel data-panel"><div className="data-heading"><h2>Camera measurements</h2><span className={valid?"valid":"waiting"}>{valid?"● VALID":"○ NO RESULT"}</span></div><div className="metrics"><Metric label="TAG ID" value={valid?String(selectedId):"—"}/><Metric label="TX · CENTER" value={valid?tx.toFixed(1):"—"} unit="°"/><Metric label="TY" value={valid?"-3.1":"—"} unit="°"/><Metric label="AREA" value={valid?Math.min(99,9000/(distance*distance)).toFixed(1):"—"} unit="%"/><Metric label="LATENCY" value={valid?"14":"—"} unit="ms"/><Metric label="DISTANCE" value={valid?distance.toFixed(1):"—"} unit="in"/></div></section>
-        <section className="panel telemetry"><div className="data-heading"><h2>Coach & telemetry</h2><span>{configured?"CONFIG OK":"CHECK SETUP"}</span></div><p className={valid?"success":""}><b>{valid?"SUCCESS":"STATUS"}</b> {message}</p></section>
-      </aside>
-    </section><footer>FTC coordinates use the field center as (0,0). Measurements target the center of the selected AprilTag.</footer>
-  </main>;
+      <main className="course-main">
+        <div className="course-topline"><span>THE WORKSHOP <Icon name="chevron" size={12}/> {module.title}</span><button className={"button " + (labOpen ? "active" : "")} onClick={labOpen ? closeLab : openLab} aria-pressed={labOpen}><Icon name="lab" size={16}/>{labOpen ? "Hide lab" : "Open camera lab"}</button></div>
+        {storageWarning && <p className="feedback">Browser storage is unavailable. Progress will last for this session only.</p>}
+        <div className="lesson-layout"><article className={"lesson-stage kind-" + lesson.kind} id="lesson">
+          <div className="slide-meta"><span className="eyebrow">{workshop ? minuteStart + "–" + (minuteStart + module.minutes) + " MIN" : "MODULE " + module.label} <i/> {lesson.kind === "code" ? "CODE WALKTHROUGH" : lesson.kind === "challenge" ? "HANDS-ON LAB" : "GUIDED LESSON"}</span><span>{String(module.lessons.indexOf(lesson) + 1).padStart(2, "0")} / {String(module.lessons.length).padStart(2, "0")}</span></div>
+          <h1 ref={heading} tabIndex={-1}>{lesson.title}</h1><p className="lesson-subtitle">{lesson.subtitle}</p>
+          <div className="lesson-visual">{lesson.kind === "tag" ? <TagDiagram/> : lesson.kind === "axes" ? <AxesDiagram/> : lesson.kind === "compare" ? <Comparison/> : lesson.kind === "flow" ? <FlowDiagram webcam={module.path === "webcam"}/> : null}</div>
+          {lesson.kind === "code" && <CodeWalkthrough key={lesson.id} essentials={workshop} focus={lesson.focus} onDemonstrate={demonstrate}/>}
+          {lesson.kind === "measurements" && <TargetDataGuide camera={lesson.focus === "webcam" ? "webcam" : "limelight"}/>}
+          {lesson.kind === "ui" && <UIExplainer key={lesson.id} focus={lesson.focus} essentials={workshop} state={lab} setState={setLab} onOpen={openLab}/>}
+          {lesson.kind === "challenge" && <Challenge key={lesson.id} focus={lesson.focus} state={lab} setState={setLab} onOpen={openLab} onComplete={complete}/>}
+          {lesson.kind === "troubleshoot" && <Troubleshooter key={lesson.id} focus={lesson.focus}/>}
+          {lesson.kind === "checklist" && <Checklist key={lesson.id}/>}
+          {lesson.kind === "resources" && <Resources essentials={workshop} onReference={() => changeMode("reference")}/>}
+          {lesson.id === "ll-hardware" && <aside className="usb-warning" role="note" aria-label="USB port recommendation"><strong>Recommendation: use the blue USB 3.0 port</strong><p>Limelight specifies USB 3.0, and REV lists Limelight 3A as “USB 3.0 only.” One reason to avoid the Control Hub's USB 2.0 port is its documented ESD vulnerability: that port shares a bus with the internal Wi-Fi radio, so an ESD event or electrical interference can disconnect the Driver Hub. USB 3.0 also provides more bandwidth headroom.</p><div><a href="https://docs.limelightvision.io/docs/docs-limelight/getting-started/limelight-3a" target="_blank" rel="noreferrer">Limelight wiring guidance <Icon name="external" size={12}/></a><a href="https://docs.revrobotics.com/duo-control/sensors/5v-sensors/sensor-compatibility-chart" target="_blank" rel="noreferrer">REV compatibility table <Icon name="external" size={12}/></a><a href="https://ftc-docs.firstinspires.org/en/latest/tech_tips/tech-tips/tech-tip-hub-tips/tech-tip-hub-tips.html" target="_blank" rel="noreferrer">FTC USB/ESD note <Icon name="external" size={12}/></a></div></aside>}
+          {lesson.quiz ? <section className="quiz"><h2>{lesson.quiz.question}</h2>{lesson.quiz.options.map((option, i) => <button key={option} className={answer === i ? "selected" : ""} onClick={() => { setAnswer(i); if (i === lesson.quiz!.answer) complete(); }}><span>{String.fromCharCode(65 + i)}</span>{option}</button>)}{answer !== null && <p role="status" className={answer === lesson.quiz.answer ? "feedback success" : "feedback"}>{answer === lesson.quiz.answer ? "Correct. " + lesson.quiz.explanation : "Not quite. Try another answer."}</p>}</section> : <div className="lesson-points">{lesson.points.map((point, i) => <div key={point}><span className="point-number">{String(i + 1).padStart(2, "0")}</span><p>{point}</p></div>)}</div>}
+          <div className="takeaway"><Icon name="target" size={20}/><div><span>TAKE THIS WITH YOU</span><p>{lesson.takeaway}</p></div></div>
+          {presenter && <details className="speaker-notes"><summary className="eyebrow">FACILITATOR NOTES</summary><p>{lesson.note}</p></details>}
+          <div className="slide-source"><span>REFERENCE</span><a href={source.url} target="_blank" rel="noreferrer">{source.title} <Icon name="external" size={12}/></a></div>
+        </article>{labOpen && <Simulator state={lab} setState={setLab} focus={lesson.focus} onClose={closeLab}/>}</div>
+        <footer className="lesson-footer"><button className="button previous" disabled={index === 0} onClick={() => navigate(lessons[index - 1].id)}><span className="rotate"><Icon name="arrow" size={18}/></span> Previous</button><div className="footer-progress"><span>LESSON {index + 1} OF {lessons.length}</span><span>{progress.completed.includes(lesson.id) ? "✓ Completed" : "Go at your own pace"}</span></div><button className="button primary" onClick={next}>{index === lessons.length - 1 ? "Finish lesson" : "Next lesson"}<Icon name="arrow" size={18}/></button></footer>
+        <div className="course-footnote"><span>Built for learning. Test on your robot.</span><label><input type="checkbox" checked={progress.reducedMotion} onChange={e => setProgress(p => ({ ...p, reducedMotion: e.target.checked }))}/> Reduce motion</label></div>
+        {endMessage && <p role="status" className="feedback success">{count === lessons.length ? "Course complete. Your examples and checklist are ready to take to the robot." : "You reached the end. Revisit unfinished quizzes and challenges in the outline to complete your path."}</p>}
+      </main>
+    </div>
+    <dialog ref={resetDialog} aria-labelledby="reset-title" className="modal" onCancel={() => setReset(false)}><h2 id="reset-title">Start this course again?</h2><p>This clears lesson completion on this browser.</p><div className="button-row"><button autoFocus className="button" onClick={() => setReset(false)}>Keep progress</button><button className="button danger" onClick={() => { setProgress(p => ({ ...p, completed: [], lesson: "welcome" })); setAnswer(null); setReset(false); }}>Reset course</button></div></dialog>
+  </div>;
 }
-export default App;

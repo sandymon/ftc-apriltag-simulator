@@ -1,0 +1,15 @@
+{
+  "reviewedAt": "2026-09-08",
+  "source": "https://docs.google.com/presentation/d/1v-s8sG60iSbBq0LetFFla8qH7atbK3frAVOAXwSYgKI/edit",
+  "sourceTitle": "Copy of Limelight 3A Tutorial — Spring 2026",
+  "owner": "Reference-deck authors; Limelight UI belongs to Limelight Vision",
+  "permissionStatus": "User explicitly confirmed permission to reuse the screenshots on 2026-09-08.",
+  "license": "Used with user-confirmed permission; no general open-source image license asserted.",
+  "limelightOsVersion": "Not visible in supplied captures. Reference UI, not a verified latest-version UI.",
+  "assets": [
+    {"id":"input","localPath":"limelight-input.png","slide":24,"pageId":"g393e28d178d_0_268","altText":"Limelight Input tab: AprilTags, source, resolution, stream orientation, exposure, black level, gain, flicker, and white balance."},
+    {"id":"configuration","localPath":"limelight-configuration.png","slide":29,"pageId":"g393e28d178d_0_65","altText":"Limelight Configuration tab: tag family, marker size, downscale, quality, filters, sorting and crop."},
+    {"id":"advanced","localPath":"limelight-advanced.png","slide":39,"pageId":"g393e28d178d_0_5","altText":"Limelight Advanced tab: full 3D, target offset, camera mount pose and field map."},
+    {"id":"visualizer","localPath":"limelight-visualizer.png","slide":43,"pageId":"g393d58e6a2b_4_1506","altText":"Limelight visualizer selection with camera, robot, tag and field coordinate views."}
+  ]
+}
