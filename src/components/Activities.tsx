@@ -4,10 +4,10 @@ import type { LabState } from "../simulation/model";
 import { commands, primary, reported } from "../simulation/model";
 import { inputGuidance, inputs } from "../course/inputs";
 import { sources } from "../course/sources";
-import { PipelineControls } from "./Simulator";
+
 import { Icon } from "./Icon";
 type Shared = { state: LabState; setState: Dispatch<SetStateAction<LabState>>; onOpen: () => void };
-export function UIExplainer({ focus = "pipeline", essentials = false, state, setState, onOpen }: Shared & { focus?: string; essentials?: boolean }) {
+export function UIExplainer({ focus = "pipeline", essentials = false }: { focus?: string; essentials?: boolean }) {
   const [active, setActive] = useState(focus);
   const input = inputs.find(i => i.id === active) ?? inputs[0];
   const group = input.group, image = group === "Input" ? "input" : group === "Configuration" ? "configuration" : "advanced";
@@ -19,9 +19,9 @@ export function UIExplainer({ focus = "pipeline", essentials = false, state, set
     <div className={"ui-reference image-" + image}><a href={asset} target="_blank" rel="noreferrer" title="Open full-size reference screenshot"><img src={asset} alt={"LimelightOS " + group + " tab from the supplied Spring 2026 training deck"}/></a></div>
     <p className="asset-caption">Reference UI · Spring 2026 deck · OS version unspecified · <a href={asset} target="_blank" rel="noreferrer">View full size ↗</a></p>
     <div className="hotspot-list" aria-label="Explain a UI control">{items.map((item, i) => <button key={item.id} aria-pressed={active === item.id} onClick={() => setActive(item.id)}><span>{i + 1}</span>{item.label}</button>)}</div>
-    <div className="input-explanation"><div><span className="eyebrow">{group.toUpperCase()} / {input.unit}</span><h3>{input.label}</h3><p>{input.meaning}</p>{guidance && <div className="setting-guidance"><section><h4>Recommended starting point</h4><p>{guidance.recommendation}</p></section><div className="pros-cons"><section><h4>Advantages</h4><p>{guidance.pros}</p></section><section><h4>Tradeoffs</h4><p>{guidance.cons}</p></section></div>{guidance.choices && <div className="choice-guide"><h4>Options</h4>{guidance.choices.map(choice => <div key={choice.option}><strong>{choice.option}</strong><span>{choice.useWhen}</span><small>{choice.tradeoff}</small></div>)}</div>}</div>}<p className="input-caution"><strong>Watch for:</strong> {input.mistake}</p></div><div className="inline-controls"><span className="eyebrow">TRY THE TEACHING CONTROL</span><PipelineControls state={state} setState={setState} focus={active}/><button className="button primary" onClick={onOpen}><Icon name="lab" size={16}/> Observe in the lab</button></div></div>
+    <div className="input-explanation"><div><span className="eyebrow">{group.toUpperCase()} / {input.unit}</span><h3>{input.label}</h3><p>{input.meaning}</p>{guidance && <div className="setting-guidance"><section><h4>Recommended starting point</h4><p>{guidance.recommendation}</p></section><div className="pros-cons"><section><h4>Advantages</h4><p>{guidance.pros}</p></section><section><h4>Tradeoffs</h4><p>{guidance.cons}</p></section></div>{guidance.choices && <div className="choice-guide"><h4>Options</h4>{guidance.choices.map(choice => <div key={choice.option}><strong>{choice.option}</strong><span>{choice.useWhen}</span><small>{choice.tradeoff}</small></div>)}</div>}</div>}<p className="input-caution"><strong>Watch for:</strong> {input.mistake}</p></div></div>
     {active === "map" && <figure className="ui-reference"><img src={import.meta.env.BASE_URL + "lesson-assets/limelight-visualizer.png"} alt="Limelight field visualizer reference showing robot, camera, and tag coordinate frames"/><figcaption className="asset-caption">Field visualizer reference from the approved training deck. A known map and measured camera mounting pose connect these coordinate frames.</figcaption></figure>}
-    <p className="lab-fineprint">Screenshot values are examples from the source deck, not recommended settings for your robot. The lab's controls are a simplified teaching model.</p>
+    <p className="lab-fineprint">Screenshot values are examples from the source deck, not recommended settings for your robot.</p>
   </section>;
 }
 export function Challenge({ focus = "visible", state: s, setState, onOpen, onComplete }: Shared & { focus?: string; onComplete: () => void }) {
@@ -51,13 +51,13 @@ export function Challenge({ focus = "visible", state: s, setState, onOpen, onCom
     onOpen();
   };
   return <section className="challenge-card"><div className="challenge-heading"><Icon name="lab" size={24}/><div><span className="eyebrow">YOUR TURN</span><h3>Make it happen in the lab.</h3></div></div>
-    {focus === "assembly" ? <div className="assembly-steps">{["Create processor", "Attach to camera", "Build portal"].map((text, i) => <button className="button" key={text} disabled={assembly > i} onClick={() => assemble(i)}>{assembly > i ? "✓" : i + 1} {text}</button>)}</div> : <><p>Open the lab, use its Field, Settings, and Control tabs, then check your result.</p><div className="challenge-live"><span>{d?.valid ? "● Target " + d.id : "○ No valid target"}</span><span>Angle {d?.valid ? d.tx.toFixed(1) + "°" : "—"}</span><span>Range {d?.valid ? d.range.toFixed(1) + " in" : "—"}</span></div></>}
+    {focus === "assembly" ? <div className="assembly-steps">{["Create processor", "Attach to camera", "Build portal"].map((text, i) => <button className="button" key={text} disabled={assembly > i} onClick={() => assemble(i)}>{assembly > i ? "✓" : i + 1} {text}</button>)}</div> : <><p>Open the lab. The field and live values stay visible while you use the Position, Settings, and Control tabs.</p><div className="challenge-live"><span>{d?.valid ? "● Target " + d.id : "○ No valid target"}</span><span>Angle {d?.valid ? d.tx.toFixed(1) + "°" : "—"}</span><span>Range {d?.valid ? d.range.toFixed(1) + " in" : "—"}</span></div></>}
     <div className="button-row"><button className="button" onClick={onOpen}>Open camera lab</button><button className="button primary" onClick={check}><Icon name="check" size={16}/> Check my result</button></div>{feedback && <p role="status" className={passed ? "feedback success" : "feedback"}>{feedback}</p>}
   </section>;
 }
 const faultTrees: Record<string, { q: string; yes: string; no: string }[]> = {
   detection: [
-    { q: "Is the camera stream visible?", no: "Check the USB data cable, active Robot Configuration, and exact hardware name. Start the portal or Limelight polling. Look for a camera ERROR state.", yes: "Inspect the image before tuning the detector." },
+    { q: "Is the camera stream visible?", no: "Check the USB data cable, active Robot Configuration, and exact hardware name. Start VisionPortal or tell the robot to begin requesting Limelight results. Look for a camera ERROR state.", yes: "Inspect the image before tuning the detector." },
     { q: "Is a sharp, complete tag inside the image?", no: "Remove obstructions. Move closer. Tune exposure and gain. Make the tag face the camera; include the complete black border and margin.", yes: "Now check pipeline configuration." },
     { q: "Do pipeline type, family, ID filter, and crop admit this tag?", no: "Select AprilTags / 36h11, remove an unintended ID filter, and restore the crop. Verify the returned pipeline index.", yes: "Try a known test tag, lower detector downscale, and inspect stream rate and lighting." },
   ],
@@ -86,11 +86,11 @@ const downloads = [
   ["LimelightAlignTank.java", "Limelight turn assist", "Select a fiducial, bound turn power, and release to stop."],
   ["RobotAutoDriveToAprilTagTank.java", "FIRST tank sample", "The supplied sample with its original license and exposure controls."],
 ];
-export function Resources({ essentials = false, onReference }: { essentials?: boolean; onReference?: () => void }) {
+export function Resources() {
   return <section className="resources">
-    <div className="download-grid">{(essentials ? downloads.slice(0, 2) : downloads).map(([file, title, copy]) => <a key={file} download href={import.meta.env.BASE_URL + "examples/" + file}><Icon name="code" size={24}/><strong>{title}</strong><span>{copy}</span><small>Download .java <Icon name="download" size={13}/></small></a>)}</div>
-    {essentials && <button className="button" style={{ marginTop: 20 }} onClick={onReference}>Optional: explore the reference library →</button>}
-    <details className="source-details" open={!essentials}><summary>Official references & course sources</summary><div className="resource-links">{Object.values(sources).map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}<Icon name="external" size={15}/></a>)}</div></details>
+    <div className="download-grid">{downloads.slice(0, 2).map(([file, title, copy]) => <a key={file} download href={import.meta.env.BASE_URL + "examples/" + file}><Icon name="code" size={24}/><strong>{title}</strong><span>{copy}</span><small>Download .java <Icon name="download" size={13}/></small></a>)}</div>
+    <details className="source-details"><summary>Official references & course sources</summary><div className="resource-links">{Object.values(sources).map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title}<Icon name="external" size={15}/></a>)}</div></details>
     <p className="lab-fineprint">Java examples use verified FTC APIs but have not been compiled or driven on your physical robot. The supplied tank sample is disabled and uses the external.samples package; follow its comments to adapt it into TeamCode.</p>
   </section>;
 }
+

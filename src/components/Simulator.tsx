@@ -1,13 +1,26 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { LabState, Pipeline, Detection } from "../simulation/model";
-import { cameraPose, clamp, commands, detections, initialLab, modelStats, primary, radians, reported } from "../simulation/model";
+import { cameraPose, clamp, commands, detections, initialLab, modelStats, primary, radians, reported, wrap } from "../simulation/model";
 import { Icon } from "./Icon";
 import darkField from "../../decode-custom-field-images-meepmeep-compatible-printer-v0-nlvmv6rqoonf1.webp";
 import lightField from "../../decode-custom-field-images-meepmeep-compatible-printer-v0-9m6dg4eqoonf1.webp";
 type Props = { state: LabState; setState: Dispatch<SetStateAction<LabState>>; focus?: string; onClose: () => void };
-export function NumberField({ label, value, onChange, min = -70, max = 70, step = 1 }: { label: string; value: number; onChange: (n: number) => void; min?: number; max?: number; step?: number }) {
-  return <label className="lab-label">{label}<input type="number" value={Number(value.toFixed(3))} min={min} max={max} step={step} onChange={e => { if (Number.isFinite(e.target.valueAsNumber)) onChange(clamp(e.target.valueAsNumber, min, max)); }}/></label>;
+export function NumberField({ label, value, onChange, min = -70, max = 70, step = 1, allowOutOfRange = false }: { label: string; value: number; onChange: (n: number) => void; min?: number; max?: number; step?: number; allowOutOfRange?: boolean }) {
+  const [text, setText] = useState(String(Number(value.toFixed(3))));
+  const lastValue = useRef(value);
+  useEffect(() => {
+    if (value !== lastValue.current) setText(String(Number(value.toFixed(3))));
+    lastValue.current = value;
+  }, [value]);
+  const commit = (raw: string) => {
+    const numeric = Number(raw);
+    if (!Number.isFinite(numeric)) { setText(String(Number(value.toFixed(3)))); return; }
+    const next = allowOutOfRange ? numeric : clamp(numeric, min, max);
+    setText(String(Number(next.toFixed(3))));
+    onChange(next);
+  };
+  return <label className="lab-label">{label}<input type="number" value={text} min={min} max={max} step={step} onChange={e => { setText(e.target.value); const numeric = e.target.valueAsNumber; if (Number.isFinite(numeric)) onChange(allowOutOfRange ? numeric : clamp(numeric, min, max)); }} onBlur={e => commit(e.target.value)}/></label>;
 }
 function Field({ state: s, setState, list }: Omit<Props, "onClose"> & { list: Detection[] }) {
   const ref = useRef<HTMLDivElement>(null), [drag, setDrag] = useState<string | number | null>(null), [dark, setDark] = useState(true);
@@ -25,6 +38,7 @@ function Field({ state: s, setState, list }: Omit<Props, "onClose"> & { list: De
       <button className="field-robot" style={{ ...xy(s.robot.x, s.robot.y), transform: "translate(-50%,-50%) rotate(" + (90 - s.robot.heading) + "deg)" }} aria-label="Move robot" onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); setDrag("robot"); }}><span>↑</span></button>
       {s.tags.map(t => { const d = list.find(item => item.id === t.id); return <button key={t.id} className={"field-tag " + (t.id === s.selected ? "selected " : "") + (d?.valid ? "detected" : "")} style={xy(t.x, t.y)} onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); setDrag(t.id); setState(old => ({ ...old, selected: t.id })); }} onClick={() => setState(old => ({ ...old, selected: t.id }))} aria-label={"Select AprilTag " + t.id}><img src={import.meta.env.BASE_URL + "apriltags/tag-" + t.id + "-36h11.png"} alt=""/><span>{t.id}</span></button>; })}
     </div><div className="field-caption"><span>141 × 141 in · practice layout</span><span>Drag robot or tags</span></div>
+    <div className="field-rotation"><button className="icon-button" aria-label="Rotate robot left 15 degrees" onClick={() => setState(old => ({ ...old, robot: { ...old.robot, heading: wrap(old.robot.heading + 15) } }))}>↺</button><label>Robot rotation <input aria-label="Robot rotation (degrees)" type="range" min="-180" max="180" step="1" value={s.robot.heading} onChange={e => setState(old => ({ ...old, robot: { ...old.robot, heading: Number(e.target.value) } }))}/><output>{Math.round(s.robot.heading)}°</output></label><button className="icon-button" aria-label="Rotate robot right 15 degrees" onClick={() => setState(old => ({ ...old, robot: { ...old.robot, heading: wrap(old.robot.heading - 15) } }))}>↻</button></div>
   </div>;
 }
 function CameraPreview({ s, list }: { s: LabState; list: Detection[] }) {
@@ -57,7 +71,7 @@ export function PipelineControls({ state: s, setState, focus }: Omit<Props, "onC
     {section("family", sel("family", "Tag family", ["36h11", "25h9"]))}
     {section("size", n("size", "Marker size (mm)", 10, 250, .1))}
     {section("downscale", n("downscale", s.camera === "webcam" ? "Decimation" : "Detector downscale", 1, 4))}
-    {section("quality", <>{n("quality", "Min. confidence (illustrative)", 0, 1, .1)}<small>Not the version-specific Limelight quality score.</small></>)}
+    {section("quality", <><NumberField label="Quality threshold (whole number)" value={p.quality} min={0} max={10} step={1} onChange={value => set("quality", Math.round(value))}/><small>Integer teaching scale; confirm the exact range in your installed LimelightOS version.</small></>)}
     {section("filter", <label className="lab-label">ID filter<input placeholder="Blank = all; e.g. 20,21" value={p.filter} onChange={e => set("filter", e.target.value)}/></label>)}
     {section("crop", <>{n("cropX", "Centered X crop (fraction)", .1, 1, .1)}{n("cropY", "Centered Y crop (fraction)", .1, 1, .1)}</>)}
     {section("sort", sel("sort", "Target selection", ["Largest", "Highest", "Lowest", "Group center", "Selected"]))}
@@ -69,7 +83,9 @@ export function PipelineControls({ state: s, setState, focus }: Omit<Props, "onC
   </div>;
 }
 export function Simulator({ state: s, setState, focus, onClose }: Props) {
-  const [tab, setTab] = useState("Field"), [frame, setFrame] = useState("Target in camera"), [tagToAdd, setTagToAdd] = useState(22);
+  const [tab, setTab] = useState("Settings"), [frame, setFrame] = useState("Target in camera"), [tagToAdd, setTagToAdd] = useState(22), [fullscreen, setFullscreen] = useState(false);
+  const workspace = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (fullscreen && workspace.current) workspace.current.scrollTop = 0; }, [fullscreen]);
   const p = s.pipelines[s.slot], list = reported(s), live = detections(s), selected = primary(s, list), c = commands(s, selected);
   const patch = (value: Partial<LabState>) => setState(old => ({ ...old, ...value }));
   const setTag = (key: "x" | "y" | "yaw" | "height" | "known", value: number | boolean) => setState(old => ({ ...old, tags: old.tags.map(t => t.id === old.selected ? { ...t, [key]: value } : t) }));
@@ -77,12 +93,17 @@ export function Simulator({ state: s, setState, focus, onClose }: Props) {
   const pose = cameraPose(s);
   const start = () => patch({ running: true, phase: "Opening camera", captures: [], assist: false });
   const value = (n: number | undefined, unit: string, known = true) => selected?.valid && known && n !== undefined ? n.toFixed(1) + unit : "—";
-  return <aside className="lab-panel" aria-label="Interactive camera lab">
-    <div className="lab-heading"><div><span className="eyebrow">EXPERIMENT & OBSERVE</span><h2>Camera lab <span className="live-dot"/></h2></div><button className="icon-button" aria-label="Close lab" onClick={onClose}><Icon name="close"/></button></div>
+  return <aside className={"lab-panel " + (fullscreen ? "lab-fullscreen" : "")} aria-label="Interactive camera lab">
+    <div className="lab-heading"><div><span className="eyebrow">EXPERIMENT & OBSERVE</span><h2>Camera lab <span className="live-dot"/></h2></div><div className="lab-heading-actions"><button className="button" aria-pressed={fullscreen} onClick={() => setFullscreen(value => !value)}>{fullscreen ? "Exit full screen" : "Full screen"}</button><button className="icon-button" aria-label="Close lab" onClick={onClose}><Icon name="close"/></button></div></div>
     <div className="lab-camera-switch"><select aria-label="Lab camera" value={s.camera} onChange={e => setState(initialLab(e.target.value as "webcam" | "limelight"))}><option value="limelight">Limelight 3A</option><option value="webcam">Webcam / VisionPortal</option></select><span className="small-badge">SIMULATED</span></div>
-    <div className="lab-tabs">{["Field", "Settings", "Control"].map(t => <button key={t} aria-pressed={tab === t} onClick={() => setTab(t)}>{t}</button>)}</div>
-    <div className="lab-body">
-      {tab === "Field" && <><Field state={s} setState={setState} list={live}/><CameraPreview s={s} list={list}/>
+    <div className="lab-body lab-workspace" ref={workspace}>
+      <div className="lab-visuals"><Field state={s} setState={setState} list={live}/><CameraPreview s={s} list={list}/>
+        <section className="lab-telemetry"><div className="lab-section-title"><span>LIVE MEASUREMENTS</span><span className={selected?.valid ? "valid-text" : ""}>{selected?.valid ? "● VALID" : "○ NO RESULT"}</span></div><div className="metric-grid">
+          {[["Target", selected?.valid ? selected.id === -1 ? "Group" : String(selected.id) : "—"],[s.camera === "webcam" ? "Bearing" : "tx", value(s.camera === "webcam" ? selected?.bearing : selected?.tx, "°", s.camera !== "webcam" || !!selected?.tag.known)],[s.camera === "webcam" ? "Elevation (model)" : "ty", value(selected?.ty, "°", s.camera !== "webcam" || !!selected?.tag.known)],[s.camera === "webcam" ? "Area (model)" : "Area", value(selected?.area, "%")],["Range", value(selected?.range, " in", s.camera !== "webcam" || !!selected?.tag.known)],["Capture delay", String(s.delay) + " ms"]].map(([label, val]) => <div key={label}><span>{label}</span><strong>{val}</strong></div>)}
+        </div><p role="status">{s.tags.length ? selected?.reason ?? "Waiting for a result" : "No tags on the field. Add a tag to continue."}{selected?.valid && s.camera === "webcam" && !selected.tag.known ? " · ID decoded; no library pose" : ""}</p></section>
+      </div>
+      <div className="lab-tools"><div className="lab-tabs">{["Position", "Control"].map(t => <button key={t} aria-pressed={tab === t} onClick={() => setTab(t)}>{t}</button>)}</div>
+      {tab === "Position" && <>
         <div className="lab-section-title"><span>POSITION CONTROLS</span><span>in / degrees</span></div><div className="lab-grid">
           <NumberField label="Robot X (in)" value={s.robot.x} onChange={x => patch({ robot: { ...s.robot, x } })}/>
           <NumberField label="Robot Y (in)" value={s.robot.y} onChange={y => patch({ robot: { ...s.robot, y } })}/>
@@ -91,17 +112,22 @@ export function Simulator({ state: s, setState, focus, onClose }: Props) {
           {tag && <><NumberField label="Tag X (in)" value={tag.x} onChange={n => setTag("x", n)}/><NumberField label="Tag Y (in)" value={tag.y} onChange={n => setTag("y", n)}/><NumberField label="Tag face yaw (°)" value={tag.yaw} min={-180} max={180} onChange={n => setTag("yaw", n)}/><NumberField label="Tag height (m)" value={tag.height} min={0} max={1} step={.01} onChange={n => setTag("height", n)}/><label className="check-label"><input type="checkbox" checked={tag.known} onChange={e => setTag("known", e.target.checked)}/> Known metadata</label></>}
         </div><div className="button-row tag-edit"><select aria-label="Tag to add" value={tagToAdd} onChange={e => setTagToAdd(Number(e.target.value))}>{[20,21,22,23,24].map(id => <option key={id} value={id}>ID {id}</option>)}</select><button className="button" disabled={s.tags.some(t => t.id === tagToAdd)} onClick={() => patch({ tags: [...s.tags, { id: tagToAdd, x: 0, y: 32, height: .3, yaw: -90, size: 50.8, known: true }], selected: tagToAdd })}>Add tag</button><button className="button" disabled={!tag} onClick={() => { const tags = s.tags.filter(t => t.id !== s.selected); patch({ tags, selected: tags[0]?.id ?? 20 }); }}>Remove tag</button></div></>}
       {tab === "Settings" && <><label className="lab-label">Hardware name<input value={s.hardware} onChange={e => patch({ hardware: e.target.value })}/></label>{s.camera === "webcam" && <div className="portal-assembly"><label className="check-label"><input type="checkbox" checked={s.processor} onChange={e => patch({ processor: e.target.checked, attached: e.target.checked && s.attached })}/> AprilTagProcessor created</label><label className="check-label"><input type="checkbox" disabled={!s.processor} checked={s.attached} onChange={e => patch({ attached: e.target.checked })}/> Processor attached to portal</label></div>}<PipelineControls state={s} setState={setState} focus={focus}/></>}
-      {tab === "Control" && <><div className="lab-grid"><label className="lab-label">Control mode<select value={s.mode} onChange={e => patch({ mode: e.target.value })}><option>Align</option><option>Approach</option></select></label><NumberField label="Turn gain" value={s.turnGain} min={0} max={.1} step={.005} onChange={turnGain => patch({ turnGain })}/><NumberField label="Speed gain" value={s.speedGain} min={0} max={.1} step={.005} onChange={speedGain => patch({ speedGain })}/><NumberField label="Maximum turn" value={s.maxTurn} min={0} max={.5} step={.05} onChange={maxTurn => patch({ maxTurn })}/><NumberField label="Maximum speed" value={s.maxSpeed} min={0} max={.5} step={.05} onChange={maxSpeed => patch({ maxSpeed })}/><NumberField label="Angle tolerance (°)" value={s.tolerance} min={0} max={5} step={.5} onChange={tolerance => patch({ tolerance })}/><NumberField label="Desired range (in)" value={s.desired} min={6} max={60} onChange={desired => patch({ desired })}/></div>
+      {tab === "Control" && <><div className="lab-grid"><label className="lab-label">Control mode<select value={s.mode} onChange={e => patch({ mode: e.target.value })}><option>Align</option><option>Approach</option></select></label><NumberField label="Turn gain (power per degree)" value={s.turnGain} min={0} max={.1} step={.005} allowOutOfRange onChange={turnGain => patch({ turnGain })}/><NumberField label="Speed gain (power per inch)" value={s.speedGain} min={0} max={.1} step={.005} allowOutOfRange onChange={speedGain => patch({ speedGain })}/><NumberField label="Maximum turn (power limit)" value={s.maxTurn} min={0} max={.5} step={.05} allowOutOfRange onChange={maxTurn => patch({ maxTurn })}/><NumberField label="Maximum speed (power limit)" value={s.maxSpeed} min={0} max={.5} step={.05} allowOutOfRange onChange={maxSpeed => patch({ maxSpeed })}/><NumberField label="Angle tolerance (degrees)" value={s.tolerance} min={0} max={5} step={.5} allowOutOfRange onChange={tolerance => patch({ tolerance })}/><NumberField label="Desired range (inches)" value={s.desired} min={6} max={60} allowOutOfRange onChange={desired => patch({ desired })}/></div><div className="control-warnings">{s.maxTurn > 1 || s.maxSpeed > 1 ? <p><strong>Power warning:</strong> A motor command above 1 is outside the normal -1 to +1 power range. The lab will clip the final command.</p> : null}{s.turnGain < 0 || s.speedGain < 0 ? <p><strong>Gain warning:</strong> Negative gain reverses the correction direction.</p> : null}{s.turnGain > 1 || s.speedGain > 1 ? <p><strong>Gain warning:</strong> Large gains can cause abrupt corrections or oscillation.</p> : null}{s.tolerance < 0 ? <p><strong>Tolerance warning:</strong> Use zero or a positive value.</p> : null}{s.desired <= 0 ? <p><strong>Distance warning:</strong> Desired range should be greater than zero.</p> : null}</div><div className="control-definitions">
+        <p><strong>Turn gain</strong><span>Angle error × gain = requested turn power. A larger value corrects rotation more strongly.</span></p>
+        <p><strong>Speed gain</strong><span>Range error × gain = requested drive power in Approach mode. A larger value approaches or backs away more strongly.</span></p>
+        <p><strong>Maximum turn</strong><span>Caps automatic turn power. Lower values limit how quickly the robot can rotate.</span></p>
+        <p><strong>Maximum speed</strong><span>Caps automatic forward or reverse power in Approach mode.</span></p>
+        <p><strong>Angle tolerance</strong><span>The centered zone around 0°. The controller requests no turn while the error is inside this zone.</span></p>
+        <p><strong>Desired range</strong><span>The camera-to-tag distance the robot tries to hold in Approach mode.</span></p>
+      </div>
         <button className={"button assist-button " + (s.assist ? "active" : "")} disabled={!s.running} onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); patch({ assist: true }); }} onPointerUp={() => patch({ assist: false })} onPointerCancel={() => patch({ assist: false })} onKeyDown={e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); patch({ assist: true }); } }} onKeyUp={() => patch({ assist: false })} onBlur={() => patch({ assist: false })}>Hold assist · release to stop</button>
         <div className="command-bars">{Object.entries(c).map(([label, n]) => <div key={label}><span>{label}</span><meter min={-1} max={1} value={n}/><code>{n.toFixed(2)}</code></div>)}</div>
         <p className="lab-fineprint">Tank mixer: left = drive − turn; right = drive + turn. Positive turn is CCW. Approach uses the lab's geometric range estimate. Unknown webcam metadata, grouped targets, snapshots and stale data disable assistance.</p>
         <div className="lab-section-title"><span>TEACHING FAULTS</span></div>{(["noise", "drops", "blur"] as const).map(key => <label className="check-label" key={key}><input type="checkbox" checked={s[key]} onChange={e => patch({ [key]: e.target.checked })}/>{key === "noise" ? "Noisy angles" : key === "drops" ? "Drop frames" : "Motion blur (with long exposure)"}</label>)}<NumberField label="Simulated capture delay (ms)" value={s.delay} min={0} max={960} step={80} onChange={delay => patch({ delay })}/>
       </>}
-      <section className="lab-telemetry"><div className="lab-section-title"><span>MEASUREMENTS</span><span className={selected?.valid ? "valid-text" : ""}>{selected?.valid ? "● VALID" : "○ NO RESULT"}</span></div><div className="metric-grid">
-        {[["Target", selected?.valid ? selected.id === -1 ? "Group" : String(selected.id) : "—"],[s.camera === "webcam" ? "Bearing" : "tx", value(s.camera === "webcam" ? selected?.bearing : selected?.tx, "°", s.camera !== "webcam" || !!selected?.tag.known)],[s.camera === "webcam" ? "Elevation (model)" : "ty", value(selected?.ty, "°", s.camera !== "webcam" || !!selected?.tag.known)],[s.camera === "webcam" ? "Area (model)" : "Area", value(selected?.area, "%")],["Range", value(selected?.range, " in", s.camera !== "webcam" || !!selected?.tag.known)],["Capture delay", String(s.delay) + " ms"]].map(([label, val]) => <div key={label}><span>{label}</span><strong>{val}</strong></div>)}
-      </div><p role="status">{s.tags.length ? selected?.reason ?? "Waiting for a result" : "No tags on the field. Add a tag to continue."}{selected?.valid && s.camera === "webcam" && !selected.tag.known ? " · ID decoded; no library pose" : ""}</p></section>
       {p.full3d && <section className="frame-inspector"><label className="lab-label">Pose expressed as<select value={frame} onChange={e => setFrame(e.target.value)}>{["Target in camera", "Target in robot", "Camera in target", "Robot in target", "Robot in field", "Camera in field"].map(f => <option key={f}>{f}</option>)}</select></label>
         <FrameValues state={s} frame={frame} pose={pose} detection={selected}/><small>Ground-truth frame illustration · 2D field + height; not a six-axis pose solver.</small></section>}
+      </div>
     </div>
     <div className="lab-runbar"><button className="button primary" disabled={s.running} onClick={start}><Icon name="play" size={15}/> Run OpMode</button><button className="button" disabled={!s.running} onClick={() => patch({ running: false, phase: "Stopped", assist: false })}>Stop</button><button className="icon-button" aria-label="Reset lab" onClick={() => setState(initialLab(s.camera))}><Icon name="reset" size={16}/></button></div><div className="lab-status">{s.phase} · virtual {s.camera === "webcam" ? "VisionPortal" : "Limelight"}</div>
   </aside>;

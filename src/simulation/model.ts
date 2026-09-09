@@ -25,7 +25,7 @@ export const clamp = (n: number, min: number, max: number) => Math.max(min, Math
 export const degrees = (r: number) => r * 180 / Math.PI;
 export const radians = (d: number) => d * Math.PI / 180;
 export const wrap = (n: number) => ((n + 180) % 360 + 360) % 360 - 180;
-export function defaultPipeline(): Pipeline { return { type: "AprilTags", source: "Camera", resolution: 640, zoom: 1, orientation: 0, exposure: 6, black: 0, gain: 15, flicker: 60, red: 1, blue: 1, family: "36h11", size: 50.8, downscale: 2, quality: 0.3, filter: "", cropX: 1, cropY: 1, sort: "Largest", full3d: false, mountForward: 0, mountRight: 0, mountHeight: 0.25, mountYaw: 0, mountPitch: 0, poi: 0, map: "Practice" }; }
+export function defaultPipeline(): Pipeline { return { type: "AprilTags", source: "Camera", resolution: 640, zoom: 1, orientation: 0, exposure: 6, black: 0, gain: 15, flicker: 60, red: 1, blue: 1, family: "36h11", size: 50.8, downscale: 2, quality: 2, filter: "", cropX: 1, cropY: 1, sort: "Largest", full3d: false, mountForward: 0, mountRight: 0, mountHeight: 0.25, mountYaw: 0, mountPitch: 0, poi: 0, map: "Practice" }; }
 export function initialLab(camera: Camera = "limelight"): LabState { return { camera, robot: { x: -15, y: -38, heading: 90 }, tags: [{ id: 20, x: 8, y: 24, height: 0.3, yaw: -90, size: 50.8, known: true }, { id: 21, x: -30, y: 40, height: 0.5, yaw: -90, size: 50.8, known: true }], selected: 20, running: false, phase: "Ready", hardware: camera === "limelight" ? "limelight" : "Webcam 1", slot: 0, pipelines: Array.from({ length: 10 }, () => defaultPipeline()), noise: false, delay: 0, drops: false, blur: false, tick: 0, assist: false, mode: "Align", turnGain: 0.01, speedGain: 0.02, maxTurn: 0.25, maxSpeed: 0.5, tolerance: 2, desired: 12, processor: true, attached: true }; }
 export function cameraPose(s: LabState) {
   const p = s.pipelines[s.slot], a = radians(s.robot.heading);
@@ -61,7 +61,7 @@ export function detections(s: LabState): Detection[] {
     else if (stats.brightness < .22 || stats.brightness > 1.95) reason = "Poor exposure";
     else if (s.blur && p.exposure > 8) reason = "Motion blur";
     else if (trueRange > 110 * (p.resolution / 640) * (2 / p.downscale)) reason = "Too small to detect";
-    else if (p.quality > .8) reason = "Below illustrative confidence threshold";
+    else if (p.quality > 8) reason = "Below illustrative quality threshold";
     else if (s.drops && s.tick % 16 < 6) reason = "Frame dropped";
     else if (s.delay > 500) reason = "Stale capture (>500 ms)";
     return { id: tag.id, tag, x: x * scale, y: y * scale, z: z * scale, tx, ty, bearing: -tx, range, trueRange, yaw, area, visible, valid: reason === "Valid target", reason };

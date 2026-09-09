@@ -18,7 +18,7 @@ const processorValues: ValueRow[] = [
   { code: "ftcPose.range", name: "Range", unit: "chosen distance unit", meaning: "Planar camera-to-tag distance calculated from the X and Y position values.", caution: "It is an estimate affected by tag size, calibration, blur, and viewing angle." },
   { code: "ftcPose.bearing", name: "Bearing", unit: "degrees", meaning: "How far the camera must turn left or right to point at the tag center. Positive is left/counterclockwise.", caution: "Bearing aims toward the tag; it does not say whether the tag face is square to the camera." },
   { code: "ftcPose.elevation", name: "Elevation", unit: "degrees", meaning: "How far the camera must tilt up or down to point at the tag center. Positive is up.", caution: "Elevation is an angle, not the Z height value." },
-  { code: "ftcPose.pitch / roll / yaw", name: "Tag rotation", unit: "degrees", meaning: "The tag's rotation about the FTC X, Y, and Z axes. Yaw describes how the tag face is turned.", caution: "Yaw is different from bearing. Use bearing to point toward the tag; use yaw when square alignment matters." },
+  { code: "ftcPose.pitch / roll / yaw", name: "Tag orientation angles", unit: "degrees", meaning: "Pitch, roll, and yaw are the tag's orientation angles about the FTC X, Y, and Z axes. Yaw describes how the tag face is turned.", caution: "Yaw is different from bearing. Use bearing to point toward the tag; use yaw when square alignment matters." },
 ];
 
 export function TargetDataGuide({ camera }: { camera: "limelight" | "webcam" }) {

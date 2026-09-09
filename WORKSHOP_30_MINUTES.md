@@ -1,6 +1,6 @@
 # FTC AprilTag workshop — 30 minutes
 
-Updated September 8, 2026 following the user's direction to prioritize the simulator, essential LimelightOS settings, target data, and code explanation. The default app is 18 slides, not the full reference library.
+Updated September 8, 2026 following the user's direction to prioritize the simulator, essential LimelightOS settings, target data, and code explanation. The default app is 13 slides, not the full reference library.
 
 ## Timed facilitator checklist
 
@@ -44,12 +44,11 @@ Updated September 8, 2026 following the user's direction to prioritize the simul
 - [x] Compare webcam processor/portal construction and `ftcPose.bearing`.
 - [x] Supply Copy code, Download Java, and Show in lab actions.
 
-### 23–28 minutes · Simulator exercises
+### 23–28 minutes · Explore the lab
 
-- [x] Move a tag or robot; predict the sign and magnitude of tx, then center the target.
-- [x] Hold a bounded turn assist; release to zero automatic output.
-- [x] Lose the target, verify zero automatic commands, then recover detection.
-- [x] Keep optional faults, approach control, and pose-frame exploration out of the timed agenda.
+- Open the lab from one exploration lesson.
+- Move the robot or tags, try settings and controls, and discuss what changes.
+- Follow participant questions at their own pace; no required exercises or pass checks.
 
 ### 28–30 minutes · Wrap up
 
@@ -73,3 +72,5 @@ The optional 99-lesson library retains the original modules, remaining UI settin
 - [ ] Confirm the installed LimelightOS version and any version-specific control ranges.
 
 The simulator uses illustrative geometry and image-quality behavior. It does not run Java, process camera pixels, connect to hardware, or solve full 6DoF localization. Lab runtime is deliberately paused/reset on reload; learning progress persists.
+
+
